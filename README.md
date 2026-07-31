@@ -21,7 +21,7 @@ GitHub Actions каждые 6 часов:
 Импортируйте конфиг в Shadowrocket:
 
 ```text
-https://raw.githubusercontent.com/nikolai-safronov/shadowrocket-roscomvpn-routing/main/shadowrocket.conf
+https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/shadowrocket.conf
 ```
 
 В Shadowrocket включите фоновое обновление конфигурации. Для фоновой работы iOS должна разрешать
