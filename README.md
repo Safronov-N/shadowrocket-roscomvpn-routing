@@ -27,6 +27,14 @@ https://raw.githubusercontent.com/nikolai-safronov/shadowrocket-roscomvpn-routin
 В Shadowrocket включите фоновое обновление конфигурации. Для фоновой работы iOS должна разрешать
 **Settings → General → Background App Refresh → Shadowrocket**.
 
+Однократно откройте **Settings → GeoLite2 Database** и задайте **Country URL**:
+
+```text
+https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
+```
+
+Поле **ASN URL** можно оставить пустым. Без внешнего URL конфиг использует встроенную Country-базу Shadowrocket.
+
 ## Источники
 
 - https://github.com/hydraponique/roscomvpn-routing
