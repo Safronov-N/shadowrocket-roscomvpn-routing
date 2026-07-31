@@ -71,11 +71,15 @@ fun normalizedLines(text: String): List<String> =
         .filter { it.isNotEmpty() && !it.startsWith("#") }
         .toList()
 
-fun regexToWildcard(pattern: String): String? =
+fun regexRule(pattern: String, category: String): List<String> =
     when (pattern) {
-        """^github-production-release-asset-[0-9a-zA-Z]{6}\.s3\.amazonaws\.com$""" ->
-            "github-production-release-asset-??????.s3.amazonaws.com"
-        else -> null
+        "^github-production-release-asset-[0-9a-zA-Z]{6}\\.s3\\.amazonaws\\.com\$" ->
+            listOf("DOMAIN-WILDCARD,github-production-release-asset-??????.s3.amazonaws.com")
+        "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?\$" -> {
+            check(category == "private") { "Неожиданное односегментное regexp в $category" }
+            emptyList()
+        }
+        else -> error("Неподдерживаемое regexp в $category: $pattern")
     }
 
 fun geositeRules(
@@ -104,10 +108,7 @@ fun geositeRules(
                     listOf("DOMAIN-KEYWORD,${line.removePrefix("keyword:")}")
                 line.startsWith("regexp:") -> {
                     val pattern = line.removePrefix("regexp:")
-                    val wildcard =
-                        regexToWildcard(pattern)
-                            ?: error("Неподдерживаемое regexp в $category: $pattern")
-                    listOf("DOMAIN-WILDCARD,$wildcard")
+                    regexRule(pattern, category)
                 }
                 ":" !in line -> listOf("DOMAIN-SUFFIX,$line")
                 else -> error("Неподдерживаемая строка в $category: $line")
