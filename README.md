@@ -35,6 +35,12 @@ https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
 
 Поле **ASN URL** можно оставить пустым. Без внешнего URL конфиг использует встроенную Country-базу Shadowrocket.
 
+## DNS и параллельные VPN
+
+Конфиг использует стандартное DNS/Fake-IP-поведение Shadowrocket без дополнительных перехватов.
+Частные диапазоны исключены из TUN, поэтому корпоративные маршруты и split-DNS остаются задачей
+NetBird или другого параллельного VPN-клиента.
+
 ## Источники
 
 - https://github.com/hydraponique/roscomvpn-routing
