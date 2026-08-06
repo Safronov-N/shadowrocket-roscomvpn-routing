@@ -1,5 +1,5 @@
 # Автоматически сгенерировано из RoscomVPN
-# LastUpdated: 1785909608
+# LastUpdated: 1785996228
 # Geosite: private, category-ru, whitelist, microsoft, apple, epicgames, riot, escapefromtarkov, steam, twitch, pinterest, faceit
 # GeoIP: private, direct
 DOMAIN,asusrouter.com
@@ -3212,7 +3212,9 @@ IP-CIDR,157.22.252.0/23,no-resolve
 IP-CIDR,157.22.254.0/24,no-resolve
 IP-CIDR,157.22.67.0/24,no-resolve
 IP-CIDR,157.22.84.0/24,no-resolve
-IP-CIDR,157.228.136.0/21,no-resolve
+IP-CIDR,157.228.136.0/22,no-resolve
+IP-CIDR,157.228.140.0/23,no-resolve
+IP-CIDR,157.228.142.0/24,no-resolve
 IP-CIDR,157.228.64.0/19,no-resolve
 IP-CIDR,157.228.96.0/20,no-resolve
 IP-CIDR,158.160.0.0/19,no-resolve
@@ -7911,7 +7913,6 @@ IP-CIDR,185.203.72.111/32,no-resolve
 IP-CIDR,185.203.72.13/32,no-resolve
 IP-CIDR,185.203.73.0/24,no-resolve
 IP-CIDR,185.203.74.0/23,no-resolve
-IP-CIDR,185.203.85.0/24,no-resolve
 IP-CIDR,185.203.96.0/22,no-resolve
 IP-CIDR,185.204.0.0/24,no-resolve
 IP-CIDR,185.204.110.0/24,no-resolve
@@ -29525,7 +29526,7 @@ IP-CIDR,89.125.102.0/23,no-resolve
 IP-CIDR,89.125.121.0/24,no-resolve
 IP-CIDR,89.125.136.0/24,no-resolve
 IP-CIDR,89.125.21.0/24,no-resolve
-IP-CIDR,89.125.215.0/24,no-resolve
+IP-CIDR,89.125.214.0/23,no-resolve
 IP-CIDR,89.125.28.0/23,no-resolve
 IP-CIDR,89.125.34.0/24,no-resolve
 IP-CIDR,89.125.55.0/24,no-resolve
@@ -29778,7 +29779,7 @@ IP-CIDR,89.208.8.0/21,no-resolve
 IP-CIDR,89.208.98.0/23,no-resolve
 IP-CIDR,89.21.128.0/19,no-resolve
 IP-CIDR,89.218.14.192/28,no-resolve
-IP-CIDR,89.218.6.74/31,no-resolve
+IP-CIDR,89.218.6.74/32,no-resolve
 IP-CIDR,89.22.1.0/24,no-resolve
 IP-CIDR,89.22.128.0/18,no-resolve
 IP-CIDR,89.22.16.0/20,no-resolve
