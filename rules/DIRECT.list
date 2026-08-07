@@ -1,5 +1,5 @@
 # Автоматически сгенерировано из RoscomVPN
-# LastUpdated: 1785996228
+# LastUpdated: 1786078898
 # Geosite: private, category-ru, whitelist, microsoft, apple, epicgames, riot, escapefromtarkov, steam, twitch, pinterest, faceit
 # GeoIP: private, direct
 DOMAIN,asusrouter.com
@@ -25981,9 +25981,11 @@ IP-CIDR,79.99.16.0/21,no-resolve
 IP-CIDR,79.99.216.0/21,no-resolve
 IP-CIDR,79.99.240.0/21,no-resolve
 IP-CIDR,79.99.48.0/21,no-resolve
+IP-CIDR,8.20.122.0/24,no-resolve
 IP-CIDR,8.209.0.0/19,no-resolve
 IP-CIDR,8.209.128.0/18,no-resolve
 IP-CIDR,8.21.110.0/24,no-resolve
+IP-CIDR,8.23.139.0/24,no-resolve
 IP-CIDR,8.40.27.0/24,no-resolve
 IP-CIDR,8.41.37.0/24,no-resolve
 IP-CIDR,80.115.192.0/19,no-resolve
