@@ -1,5 +1,5 @@
 # Автоматически сгенерировано из RoscomVPN
-# LastUpdated: 1786423084
+# LastUpdated: 1786510814
 # Geosite: private, category-ru, whitelist, microsoft, apple, epicgames, riot, escapefromtarkov, steam, twitch, pinterest, faceit
 # GeoIP: private, direct
 DOMAIN,asusrouter.com
@@ -4705,7 +4705,7 @@ IP-CIDR,178.16.152.0/22,no-resolve
 IP-CIDR,178.16.156.0/24,no-resolve
 IP-CIDR,178.16.158.0/23,no-resolve
 IP-CIDR,178.16.80.0/20,no-resolve
-IP-CIDR,178.160.193.232/29,no-resolve
+IP-CIDR,178.160.193.233/32,no-resolve
 IP-CIDR,178.161.128.0/17,no-resolve
 IP-CIDR,178.162.0.0/17,no-resolve
 IP-CIDR,178.163.0.0/16,no-resolve
@@ -24659,7 +24659,6 @@ IP-CIDR,62.233.48.0/24,no-resolve
 IP-CIDR,62.244.218.120/29,no-resolve
 IP-CIDR,62.245.32.0/19,no-resolve
 IP-CIDR,62.249.128.0/19,no-resolve
-IP-CIDR,62.250.68.23/32,no-resolve
 IP-CIDR,62.3.13.0/24,no-resolve
 IP-CIDR,62.3.34.0/24,no-resolve
 IP-CIDR,62.3.48.0/24,no-resolve
@@ -36246,6 +36245,7 @@ IP-CIDR6,2a0c:4480:1::/48,no-resolve
 IP-CIDR6,2a0c:4480:2::/47,no-resolve
 IP-CIDR6,2a0c:4480:6::/47,no-resolve
 IP-CIDR6,2a0c:4480:8::/48,no-resolve
+IP-CIDR6,2a0c:4480:c::/48,no-resolve
 IP-CIDR6,2a0c:4481:1::/48,no-resolve
 IP-CIDR6,2a0c:4481:2::/48,no-resolve
 IP-CIDR6,2a0c:4481:8::/48,no-resolve
