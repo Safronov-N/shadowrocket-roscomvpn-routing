@@ -43,9 +43,20 @@ https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
 DNS-ответами, например `dev.netmonet.co → 10.10.100.7`, попасть в маршрут NetBird или другого параллельного
 VPN-клиента вместо повторной обработки Fake-IP внутри Shadowrocket.
 
-DIRECT-запросы сначала обслуживают DNS-резолверы dev VPC `10.10.100.2` и `10.10.102.2`, доступные через
-NetBird. Поэтому special FQDN Yandex MDB получает корректный `NOERROR` и частный адрес. Публичные DNS оставлены
-только резервом: они возвращают `NXDOMAIN` для приватных MDB-хостов и не могут использоваться параллельно с VPC DNS.
+Общий профиль использует публичный Yandex DoT. Направлять `dns-server` самого Shadowrocket на VPC DNS через
+параллельный NetBird нельзя: на macOS DNS-сокет Packet Tunnel привязан к физическому интерфейсу и не попадает
+в маршрут второго VPN. Для private Yandex MDB используется отдельный Host-модуль, который возвращает приложению
+реальный private IP; дальнейшее TCP-соединение на `6432` принимает маршрут NetBird.
+
+Установите модуль:
+
+```text
+https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/netbird-mdb.module
+```
+
+В **Config → Modules → Edit Parameters** заполните `mdb_fqdn` и `mdb_ip`. IP можно получить через правильный
+VPC DNS: `dig +short @10.10.100.2 <mdb_fqdn> A | tail -n 1`. Значения параметров хранятся локально и не попадают
+в публичный репозиторий. После failover кластера IP требуется обновить.
 
 Категория `geosite:whitelist` обновляется вместе с RoscomVPN. Генерация завершится ошибкой, если в ней появится
 тип правила, который нельзя точно выразить через `always-real-ip`.

@@ -6,6 +6,7 @@ on:
       - .github/workflows/update-rules.yml
       - scripts/generate.main.kts
       - shadowrocket.template.conf
+      - netbird-mdb.module
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
@@ -35,13 +36,15 @@ jobs:
           test -s rules/PROXY.list
           test -s rules/DIRECT.list
           test -s shadowrocket.conf
+          test -s netbird-mdb.module
           grep -q '^DOMAIN-' rules/BLOCK.list
           grep -q '^DOMAIN-' rules/PROXY.list
           grep -q '^IP-CIDR' rules/DIRECT.list
           grep -q '^always-real-ip = ' shadowrocket.conf
           grep -Fq '*.netmonet.co' shadowrocket.conf
-          grep -Fxq 'dns-server = 10.10.100.2, 10.10.102.2' shadowrocket.conf
+          grep -Fxq 'dns-server = tls://common.dot.dns.yandex.net' shadowrocket.conf
           grep -Fxq 'DOMAIN-SUFFIX,mdb.yandexcloud.net,DIRECT' shadowrocket.conf
+          grep -Fq '{{{mdb_fqdn}}} = {{{mdb_ip}}}' netbird-mdb.module
 
       - name: Опубликовать изменения
         run: |
