@@ -40,6 +40,8 @@ jobs:
           grep -q '^IP-CIDR' rules/DIRECT.list
           grep -q '^always-real-ip = ' shadowrocket.conf
           grep -Fq '*.netmonet.co' shadowrocket.conf
+          grep -Fxq 'dns-server = 10.10.100.2, 10.10.102.2' shadowrocket.conf
+          grep -Fxq 'DOMAIN-SUFFIX,mdb.yandexcloud.net,DIRECT' shadowrocket.conf
 
       - name: Опубликовать изменения
         run: |

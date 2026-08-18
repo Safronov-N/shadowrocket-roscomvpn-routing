@@ -43,6 +43,10 @@ https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
 DNS-ответами, например `dev.netmonet.co → 10.10.100.7`, попасть в маршрут NetBird или другого параллельного
 VPN-клиента вместо повторной обработки Fake-IP внутри Shadowrocket.
 
+DIRECT-запросы сначала обслуживают DNS-резолверы dev VPC `10.10.100.2` и `10.10.102.2`, доступные через
+NetBird. Поэтому special FQDN Yandex MDB получает корректный `NOERROR` и частный адрес. Публичные DNS оставлены
+только резервом: они возвращают `NXDOMAIN` для приватных MDB-хостов и не могут использоваться параллельно с VPC DNS.
+
 Категория `geosite:whitelist` обновляется вместе с RoscomVPN. Генерация завершится ошибкой, если в ней появится
 тип правила, который нельзя точно выразить через `always-real-ip`.
 
