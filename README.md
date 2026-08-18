@@ -43,23 +43,29 @@ https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
 DNS-ответами, например `dev.netmonet.co → 10.10.100.7`, попасть в маршрут NetBird или другого параллельного
 VPN-клиента вместо повторной обработки Fake-IP внутри Shadowrocket.
 
-Общий профиль использует публичный Yandex DoT. Направлять `dns-server` самого Shadowrocket на VPC DNS через
-параллельный NetBird нельзя: на macOS DNS-сокет Packet Tunnel привязан к физическому интерфейсу и не попадает
-в маршрут второго VPN. Для private Yandex MDB профиль дополнительно включает `*.mdb.yandexcloud.net` и
-`*.rw.mdb.yandexcloud.net` в `always-real-ip`, а отдельный Host-модуль задаёт private IP. Шаблоны находятся
-именно в основном профиле: Shadowrocket 2.2.90 не применяет добавление `always-real-ip` из модуля в DNS-движке.
-Дальнейшее TCP-соединение на `6432` принимает маршрут NetBird.
+Общий профиль использует публичный Yandex DoT. Направлять `dns-server` самого Shadowrocket на DNS приватной
+VPC через параллельный NetBird нельзя: на macOS DNS-сокет Packet Tunnel может быть привязан к физическому
+интерфейсу и не попасть в маршрут второго VPN.
 
-Установите модуль:
+### Private Yandex MDB через NetBird
 
-```text
-https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/netbird-mdb.module
-```
+Для `*.mdb.yandexcloud.net` одного `always-real-ip` или `[Host]` недостаточно. Публичный DNS не видит private A,
+а Shadowrocket 2.2.90 после переподключения может выдать JVM новый Fake-IP из `198.18.0.0/15`. Устойчивое решение —
+направить всю зону `mdb.yandexcloud.net` в DNS нужной VPC:
 
-Сначала обновите и примените основной `shadowrocket.conf`. Затем в **Config → Modules → Edit Parameters**
-заполните `mdb_fqdn` и `mdb_ip`. IP можно получить через правильный VPC DNS:
-`dig +short @10.10.100.2 <mdb_fqdn> A | tail -n 1`. Значения параметров хранятся локально и не попадают в
-публичный репозиторий. После failover кластера IP требуется обновить.
+1. Предпочтительно создайте в NetBird Nameserver Group с DNS-адресами нужной VPC, Match Domain
+   `mdb.yandexcloud.net` и Distribution Group нужных клиентов.
+2. Если изменить NetBird нельзя, на macOS создайте `/etc/resolver/mdb.yandexcloud.net` по шаблону
+   [`examples/macos-resolver/mdb.yandexcloud.net.example`](examples/macos-resolver/mdb.yandexcloud.net.example).
+   Системный resolver выберет его как наиболее специфичный и отправит запрос через маршрут NetBird.
+3. Проверяйте системный путь командами `dscacheutil -q host -a name <mdb_fqdn>` и
+   `nc -vz <mdb_fqdn> 6432`. Обычный `dig` на macOS может обходить scoped resolver и не подходит для этой проверки.
+
+Правило `DOMAIN-SUFFIX,mdb.yandexcloud.net,DIRECT`, разрешение private IP и обход `10.0.0.0/8` уже включены
+в профиль. `yandexcloud.net` исключён только из `always-real-ip`, чтобы публичный DNS не завершал private lookup
+ошибкой; маршрутизационное правило `DIRECT` сохраняется. Модуль [`netbird-mdb.module`](netbird-mdb.module)
+оставлен только как аварийный статический pinning:
+он не исправляет FakeDNS сам по себе, а его IP потребуется менять после failover кластера.
 
 Категория `geosite:whitelist` обновляется вместе с RoscomVPN. Генерация завершится ошибкой, если в ней появится
 тип правила, который нельзя точно выразить через `always-real-ip`.
@@ -70,3 +76,5 @@ https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main
 - https://github.com/hydraponique/roscomvpn-geosite
 - https://github.com/hydraponique/roscomvpn-geoip
 - https://github.com/1andrevich/Re-filter-lists
+- https://docs.netbird.io/manage/dns/internal-dns-servers
+- https://yandex.cloud/en/docs/managed-postgresql/qa/errors

@@ -195,18 +195,15 @@ check("whitelist" in directSiteCategories) {
     "В DirectSites отсутствует обязательная категория geosite:whitelist"
 }
 
-val shadowrocketAlwaysRealIpAdditions =
-    listOf(
-        "*.mdb.yandexcloud.net",
-        "*.rw.mdb.yandexcloud.net"
-    )
+val shadowrocketAlwaysRealIpExclusions = setOf("yandexcloud.net", "*.yandexcloud.net")
 val shadowrocketAlwaysRealIpPatterns =
-    (alwaysRealIpPatterns("whitelist") + shadowrocketAlwaysRealIpAdditions)
-        .distinct()
-        .sorted()
+    alwaysRealIpPatterns("whitelist").filterNot { it in shadowrocketAlwaysRealIpExclusions }
 check(shadowrocketAlwaysRealIpPatterns.isNotEmpty()) { "Список always-real-ip получился пустым" }
 check("*.netmonet.co" in shadowrocketAlwaysRealIpPatterns) {
     "В geosite:whitelist отсутствует ожидаемый домен netmonet.co"
+}
+check(shadowrocketAlwaysRealIpPatterns.none { it in shadowrocketAlwaysRealIpExclusions }) {
+    "Yandex Cloud MDB должен использовать split-DNS, а не always-real-ip"
 }
 
 val templatePath = Path.of("shadowrocket.template.conf")
