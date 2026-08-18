@@ -128,6 +128,24 @@ fun geoipRules(category: String): List<String> =
         }
     }
 
+fun alwaysRealIpPatterns(category: String): List<String> =
+    geositeRules(category)
+        .flatMap { rule ->
+            val separatorIndex = rule.indexOf(',')
+            check(separatorIndex > 0) { "Некорректное доменное правило в $category: $rule" }
+
+            val type = rule.substring(0, separatorIndex)
+            val value = rule.substring(separatorIndex + 1)
+            when (type) {
+                "DOMAIN" -> listOf(value)
+                "DOMAIN-SUFFIX" -> listOf(value, "*.$value")
+                "DOMAIN-WILDCARD" -> listOf(value)
+                else -> error("Нельзя преобразовать $rule в always-real-ip")
+            }
+        }
+        .distinct()
+        .sorted()
+
 fun categoryName(reference: String, prefix: String): String {
     val expectedPrefix = "$prefix:"
     require(reference.startsWith(expectedPrefix)) {
@@ -171,3 +189,27 @@ specs.forEach { spec ->
     Files.writeString(outputDirectory.resolve(spec.fileName), content)
     println("${spec.fileName}: ${rules.size} правил")
 }
+
+val directSiteCategories = jsonArray(routing, "DirectSites").map { categoryName(it, "geosite") }
+check("whitelist" in directSiteCategories) {
+    "В DirectSites отсутствует обязательная категория geosite:whitelist"
+}
+
+val whitelistAlwaysRealIpPatterns = alwaysRealIpPatterns("whitelist")
+check(whitelistAlwaysRealIpPatterns.isNotEmpty()) { "Список always-real-ip получился пустым" }
+check("*.netmonet.co" in whitelistAlwaysRealIpPatterns) {
+    "В geosite:whitelist отсутствует ожидаемый домен netmonet.co"
+}
+
+val templatePath = Path.of("shadowrocket.template.conf")
+val templateMarker = "{{ROSCOMVPN_WHITELIST_ALWAYS_REAL_IP}}"
+val configTemplate = Files.readString(templatePath)
+val markerIndex = configTemplate.indexOf(templateMarker)
+check(markerIndex >= 0 && markerIndex == configTemplate.lastIndexOf(templateMarker)) {
+    "В ${templatePath.fileName} отсутствует единственный маркер $templateMarker"
+}
+
+val shadowrocketConfig =
+    configTemplate.replace(templateMarker, whitelistAlwaysRealIpPatterns.joinToString(", "))
+Files.writeString(Path.of("shadowrocket.conf"), shadowrocketConfig)
+println("shadowrocket.conf: ${whitelistAlwaysRealIpPatterns.size} шаблонов always-real-ip")
