@@ -1,0 +1,4 @@
+# Замените значения на DNS-адреса подсетей нужной Yandex Cloud VPC.
+nameserver VPC_DNS_IP_1
+nameserver VPC_DNS_IP_2
+timeout 2

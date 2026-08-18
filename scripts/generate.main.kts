@@ -195,10 +195,15 @@ check("whitelist" in directSiteCategories) {
     "В DirectSites отсутствует обязательная категория geosite:whitelist"
 }
 
-val whitelistAlwaysRealIpPatterns = alwaysRealIpPatterns("whitelist")
-check(whitelistAlwaysRealIpPatterns.isNotEmpty()) { "Список always-real-ip получился пустым" }
-check("*.netmonet.co" in whitelistAlwaysRealIpPatterns) {
+val shadowrocketAlwaysRealIpExclusions = setOf("yandexcloud.net", "*.yandexcloud.net")
+val shadowrocketAlwaysRealIpPatterns =
+    alwaysRealIpPatterns("whitelist").filterNot { it in shadowrocketAlwaysRealIpExclusions }
+check(shadowrocketAlwaysRealIpPatterns.isNotEmpty()) { "Список always-real-ip получился пустым" }
+check("*.netmonet.co" in shadowrocketAlwaysRealIpPatterns) {
     "В geosite:whitelist отсутствует ожидаемый домен netmonet.co"
+}
+check(shadowrocketAlwaysRealIpPatterns.none { it in shadowrocketAlwaysRealIpExclusions }) {
+    "Yandex Cloud MDB должен использовать split-DNS, а не always-real-ip"
 }
 
 val templatePath = Path.of("shadowrocket.template.conf")
@@ -210,6 +215,6 @@ check(markerIndex >= 0 && markerIndex == configTemplate.lastIndexOf(templateMark
 }
 
 val shadowrocketConfig =
-    configTemplate.replace(templateMarker, whitelistAlwaysRealIpPatterns.joinToString(", "))
+    configTemplate.replace(templateMarker, shadowrocketAlwaysRealIpPatterns.joinToString(", "))
 Files.writeString(Path.of("shadowrocket.conf"), shadowrocketConfig)
-println("shadowrocket.conf: ${whitelistAlwaysRealIpPatterns.size} шаблонов always-real-ip")
+println("shadowrocket.conf: ${shadowrocketAlwaysRealIpPatterns.size} шаблонов always-real-ip")
