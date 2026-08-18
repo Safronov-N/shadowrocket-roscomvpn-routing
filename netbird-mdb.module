@@ -3,6 +3,11 @@
 #!arguments=mdb_fqdn:db.example.invalid, mdb_ip:127.0.0.1
 #!arguments-desc=mdb_fqdn: Special FQDN кластера вида c-….rw.mdb.yandexcloud.net\n\nmdb_ip: Текущий private IP из DNS нужной VPC
 
+[General]
+# Точное имя обязательно: wildcard *.yandexcloud.net не покрывает многоуровневый special FQDN в Fake-IP.
+always-real-ip = %APPEND% {{{mdb_fqdn}}}
+private-ip-answer = true
+
 [Host]
 {{{mdb_fqdn}}} = {{{mdb_ip}}}
 

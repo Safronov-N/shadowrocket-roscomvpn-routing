@@ -45,6 +45,7 @@ jobs:
           grep -Fxq 'dns-server = tls://common.dot.dns.yandex.net' shadowrocket.conf
           grep -Fxq 'DOMAIN-SUFFIX,mdb.yandexcloud.net,DIRECT' shadowrocket.conf
           grep -Fq '{{{mdb_fqdn}}} = {{{mdb_ip}}}' netbird-mdb.module
+          grep -Fq 'always-real-ip = %APPEND% {{{mdb_fqdn}}}' netbird-mdb.module
 
       - name: Опубликовать изменения
         run: |
