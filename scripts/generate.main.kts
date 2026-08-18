@@ -195,9 +195,17 @@ check("whitelist" in directSiteCategories) {
     "В DirectSites отсутствует обязательная категория geosite:whitelist"
 }
 
-val whitelistAlwaysRealIpPatterns = alwaysRealIpPatterns("whitelist")
-check(whitelistAlwaysRealIpPatterns.isNotEmpty()) { "Список always-real-ip получился пустым" }
-check("*.netmonet.co" in whitelistAlwaysRealIpPatterns) {
+val shadowrocketAlwaysRealIpAdditions =
+    listOf(
+        "*.mdb.yandexcloud.net",
+        "*.rw.mdb.yandexcloud.net"
+    )
+val shadowrocketAlwaysRealIpPatterns =
+    (alwaysRealIpPatterns("whitelist") + shadowrocketAlwaysRealIpAdditions)
+        .distinct()
+        .sorted()
+check(shadowrocketAlwaysRealIpPatterns.isNotEmpty()) { "Список always-real-ip получился пустым" }
+check("*.netmonet.co" in shadowrocketAlwaysRealIpPatterns) {
     "В geosite:whitelist отсутствует ожидаемый домен netmonet.co"
 }
 
@@ -210,6 +218,6 @@ check(markerIndex >= 0 && markerIndex == configTemplate.lastIndexOf(templateMark
 }
 
 val shadowrocketConfig =
-    configTemplate.replace(templateMarker, whitelistAlwaysRealIpPatterns.joinToString(", "))
+    configTemplate.replace(templateMarker, shadowrocketAlwaysRealIpPatterns.joinToString(", "))
 Files.writeString(Path.of("shadowrocket.conf"), shadowrocketConfig)
-println("shadowrocket.conf: ${whitelistAlwaysRealIpPatterns.size} шаблонов always-real-ip")
+println("shadowrocket.conf: ${shadowrocketAlwaysRealIpPatterns.size} шаблонов always-real-ip")
