@@ -1,80 +1,113 @@
 # Shadowrocket RoscomVPN Routing
 
-Репозиторий автоматически преобразует актуальный профиль RoscomVPN `HAPP/DEFAULT.JSON`
-в нативные списки правил Shadowrocket.
-
-## Автообновление
-
-GitHub Actions каждые 6 часов:
-
-1. Загружает актуальный `HAPP/DEFAULT.JSON` из `hydraponique/roscomvpn-routing`.
-2. Определяет категории `BlockSites`, `ProxySites`, `DirectSites` и соответствующие GeoIP-категории.
-3. Загружает данные из `roscomvpn-geosite` и текстовые CIDR из `roscomvpn-geoip`.
-4. Преобразует их в `rules/BLOCK.list`, `rules/PROXY.list` и `rules/DIRECT.list`.
-5. Преобразует `geosite:whitelist` в `always-real-ip` внутри `shadowrocket.conf`.
-6. Коммитит только реальные изменения.
-
-Если RoscomVPN добавит неподдерживаемое регулярное выражение, сборка завершится ошибкой,
-а последняя рабочая версия списков останется доступной.
+Автообновляемая адаптация профиля RoscomVPN для Shadowrocket. Репозиторий преобразует категории
+`HAPP/DEFAULT.JSON` в нативные списки Shadowrocket и публикует готовый конфиг без VPN-серверов и секретов.
 
 ## Установка
 
-Импортируйте конфиг в Shadowrocket:
+Импортируйте в Shadowrocket:
 
 ```text
 https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/shadowrocket.conf
 ```
 
-В Shadowrocket включите фоновое обновление конфигурации. Для фоновой работы iOS должна разрешать
-**Settings → General → Background App Refresh → Shadowrocket**.
+Выберите своё VPN-подключение, примените конфиг и оставьте режим маршрутизации **Config**. Для автоматического
+обновления включите фоновое обновление конфигурации в Shadowrocket и Background App Refresh в настройках iOS.
 
-Однократно откройте **Settings → GeoLite2 Database** и задайте **Country URL**:
+Конфиг использует текущий выбранный сервер: действие `PROXY` не содержит адресов, ключей или учётных данных.
+
+## Маршрутизация
+
+| Трафик | Действие |
+| --- | --- |
+| `BlockSites` / `BlockIp`, рекламные списки | `REJECT` |
+| `ProxySites` / `ProxyIp`, Re-filter, проверки внешнего IP | `PROXY` |
+| `DirectSites` / `DirectIp`, whitelist, национальные зоны, остальные IP РФ | `DIRECT` |
+| Частные и NetBird-сети | исключены из TUN Shadowrocket |
+| Всё остальное | `PROXY` |
+
+Порядок правил важен: блокировки и принудительный прокси проверяются до `DIRECT` и `GEOIP,RU`.
+
+## Автообновление
+
+GitHub Actions каждые 6 часов:
+
+1. Загружает актуальный `HAPP/DEFAULT.JSON`.
+2. Проверяет ожидаемые `GlobalProxy` и `RouteOrder`.
+3. Берёт версии geosite и geoip из URL самого профиля, а не из плавающей ветки.
+4. Генерирует `rules/BLOCK.list`, `rules/PROXY.list` и `rules/DIRECT.list`.
+5. Переносит `DnsHosts` в `[Host]`, а совместимую часть `geosite:whitelist` — в `always-real-ip`.
+6. Проверяет структуру, CIDR, домены и защитные DNS-исключения перед публикацией.
+
+Если upstream меняется несовместимо или отдаёт некорректные данные, сборка завершается ошибкой. Последняя рабочая
+версия остаётся доступной.
+
+## DNS, Fake-IP и whitelist
+
+Обычные домены используют Fake-IP. Whitelist остаётся нужен, хотя `.ru` уже идёт напрямую: в категории есть
+не-RU и внутренние домены, которым Shadowrocket должен вернуть реальный адрес, чтобы соединение принял NetBird
+или другой параллельный VPN. Глобальный `always-real-ip = *` намеренно не используется.
+
+Домены проверок внешнего IP исключаются из `always-real-ip`, потому что они принудительно идут через `PROXY`.
+Зона `mdb.yandexcloud.net` также исключена: выбор её приватного DNS решается scoped resolver, а не Fake-IP.
+
+Основной DNS — публичный Yandex DoT. Ошибка DNS для `DIRECT` не переключает приватное имя на proxy resolver.
+Записи `DnsHosts` из RoscomVPN генерируются в `[Host]` автоматически.
+
+## Private Yandex MDB через NetBird
+
+Для `*.mdb.yandexcloud.net` одного `always-real-ip` или `[Host]` недостаточно: публичный DNS не знает private A,
+а статический IP ломает автоматический failover master. Нужен DNS нужной Yandex Cloud VPC.
+
+Предпочтительный централизованный вариант — NetBird Nameserver Group:
+
+- DNS-серверы нужной VPC;
+- Match Domain `mdb.yandexcloud.net`;
+- Distribution Group нужных клиентов;
+- маршрут к DNS IP и разрешённые TCP/UDP 53 через routing peer.
+
+Для отдельного Mac можно установить scoped resolver по инструкции
+[`examples/macos-resolver/README.md`](examples/macos-resolver/README.md). Он направляет только эту DNS-зону через
+NetBird. Профиль уже содержит ранний `DIRECT`, разрешает private DNS-ответы и исключает `10.0.0.0/8` из TUN.
+
+Scoped resolver используют только приложения, работающие через системный resolver macOS. `dig`, некоторые
+runtime и собственные DNS-клиенты могут его обходить, поэтому проверяйте разрешение из целевого приложения.
+На iOS файл `/etc/resolver` недоступен — используйте NetBird Nameserver Group.
+
+## GeoLite2
+
+Для более свежей Country-базы можно указать в **Settings → GeoLite2 Database → Country URL**:
 
 ```text
 https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
 ```
 
-Поле **ASN URL** можно оставить пустым. Без внешнего URL конфиг использует встроенную Country-базу Shadowrocket.
+Поле ASN можно оставить пустым. Без внешнего URL используется встроенная база Shadowrocket.
 
-## DNS, whitelist и параллельные VPN
+## Ограничения
 
-Для обычных доменов конфиг использует Fake-IP. Домены из `geosite:whitelist` автоматически добавляются
-в `always-real-ip`, но по-прежнему остаются в `DIRECT.list`. Это позволяет внутренним сервисам с частными
-DNS-ответами, например `dev.netmonet.co → 10.10.100.7`, попасть в маршрут NetBird или другого параллельного
-VPN-клиента вместо повторной обработки Fake-IP внутри Shadowrocket.
+- Обобщённое regexp для односегментных private-hostname из `geosite:private` нельзя точно выразить текущими
+  правилами Shadowrocket, поэтому оно пропускается. Полные private FQDN и IP-маршруты продолжают работать.
+- Re-filter и дополнительный рекламный список загружаются клиентом напрямую из их веток `main`; их обновления
+  не проходят через генератор этого репозитория.
+- Scoped DNS не заменяет NetBird: resolver выбирает DNS, а NetBird обеспечивает маршрут и доступ.
 
-Общий профиль использует публичный Yandex DoT. Направлять `dns-server` самого Shadowrocket на DNS приватной
-VPC через параллельный NetBird нельзя: на macOS DNS-сокет Packet Tunnel может быть привязан к физическому
-интерфейсу и не попасть в маршрут второго VPN.
+## Разработка
 
-### Private Yandex MDB через NetBird
+```bash
+kotlinc -script scripts/generate.main.kts
+```
 
-Для `*.mdb.yandexcloud.net` одного `always-real-ip` или `[Host]` недостаточно. Публичный DNS не видит private A,
-а Shadowrocket 2.2.90 после переподключения может выдать JVM новый Fake-IP из `198.18.0.0/15`. Устойчивое решение —
-направить всю зону `mdb.yandexcloud.net` в DNS нужной VPC:
+Сгенерированные `rules/*.list` и `shadowrocket.conf` не редактируются вручную. Pull request проверяется повторной
+генерацией; расписание публикует только реальные изменения.
 
-1. Предпочтительно создайте в NetBird Nameserver Group с DNS-адресами нужной VPC, Match Domain
-   `mdb.yandexcloud.net` и Distribution Group нужных клиентов.
-2. Если изменить NetBird нельзя, на macOS создайте `/etc/resolver/mdb.yandexcloud.net` по шаблону
-   [`examples/macos-resolver/mdb.yandexcloud.net.example`](examples/macos-resolver/mdb.yandexcloud.net.example).
-   Системный resolver выберет его как наиболее специфичный и отправит запрос через маршрут NetBird.
-3. Проверяйте системный путь командами `dscacheutil -q host -a name <mdb_fqdn>` и
-   `nc -vz <mdb_fqdn> 6432`. Обычный `dig` на macOS может обходить scoped resolver и не подходит для этой проверки.
+## Источники и лицензии
 
-Правило `DOMAIN-SUFFIX,mdb.yandexcloud.net,DIRECT`, разрешение private IP и обход `10.0.0.0/8` уже включены
-в профиль. `yandexcloud.net` исключён только из `always-real-ip`, чтобы публичный DNS не завершал private lookup
-ошибкой; маршрутизационное правило `DIRECT` сохраняется. Модуль [`netbird-mdb.module`](netbird-mdb.module)
-оставлен только как аварийный статический pinning:
-он не исправляет FakeDNS сам по себе, а его IP потребуется менять после failover кластера.
+- [RoscomVPN routing](https://github.com/hydraponique/roscomvpn-routing)
+- [RoscomVPN geosite](https://github.com/hydraponique/roscomvpn-geosite)
+- [RoscomVPN geoip](https://github.com/hydraponique/roscomvpn-geoip)
+- [Re-filter](https://github.com/1andrevich/Re-filter-lists)
+- [NetBird DNS](https://docs.netbird.io/manage/dns/internal-dns-servers)
+- [Yandex Cloud MDB DNS](https://yandex.cloud/en/docs/managed-postgresql/qa/errors)
 
-Категория `geosite:whitelist` обновляется вместе с RoscomVPN. Генерация завершится ошибкой, если в ней появится
-тип правила, который нельзя точно выразить через `always-real-ip`.
-
-## Источники
-
-- https://github.com/hydraponique/roscomvpn-routing
-- https://github.com/hydraponique/roscomvpn-geosite
-- https://github.com/hydraponique/roscomvpn-geoip
-- https://github.com/1andrevich/Re-filter-lists
-- https://docs.netbird.io/manage/dns/internal-dns-servers
-- https://yandex.cloud/en/docs/managed-postgresql/qa/errors
+Уведомления о лицензиях сторонних данных находятся в [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
