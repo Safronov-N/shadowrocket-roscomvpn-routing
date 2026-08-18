@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/update-rules.yml
       - scripts/generate.main.kts
+      - shadowrocket.template.conf
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
@@ -33,18 +34,21 @@ jobs:
           test -s rules/BLOCK.list
           test -s rules/PROXY.list
           test -s rules/DIRECT.list
+          test -s shadowrocket.conf
           grep -q '^DOMAIN-' rules/BLOCK.list
           grep -q '^DOMAIN-' rules/PROXY.list
           grep -q '^IP-CIDR' rules/DIRECT.list
+          grep -q '^always-real-ip = ' shadowrocket.conf
+          grep -Fq '*.netmonet.co' shadowrocket.conf
 
       - name: Опубликовать изменения
         run: |
-          if ! git status --porcelain -- rules | grep -q .; then
+          if ! git status --porcelain -- rules shadowrocket.conf | grep -q .; then
             echo "Правила не изменились"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add rules
-          git commit -m "Обновить правила из RoscomVPN"
+          git add rules shadowrocket.conf
+          git commit -m "Обновить профиль и правила из RoscomVPN"
           git push
