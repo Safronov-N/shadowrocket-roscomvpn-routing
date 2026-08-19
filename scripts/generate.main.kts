@@ -12,7 +12,9 @@ import java.nio.file.Path
 import java.time.Duration
 
 data class RouteSpec(
-    val fileName: String,
+    val name: String,
+    val domainFileName: String,
+    val ipFileName: String,
     val siteKey: String,
     val ipKey: String,
     val minimumRuleCount: Int
@@ -335,14 +337,21 @@ fun cidrRule(cidr: String, category: String): String {
     require(parts.size == 2 && parts[1].isNotEmpty() && parts[1].all { it.isDigit() }) {
         "Некорректный CIDR в $category: $cidr"
     }
+
     val address = parts[0]
-    val prefix = parts[1].toIntOrNull() ?: error("Некорректный CIDR в $category: $cidr")
+    val prefix = parts[1].toIntOrNull()
+        ?: error("Некорректный CIDR в $category: $cidr")
+
     return if (':' in address) {
-        require(isValidIpv6(address) && prefix in 0..128) { "Некорректный IPv6 CIDR в $category: $cidr" }
-        "IP-CIDR6,$cidr,no-resolve"
+        require(isValidIpv6(address) && prefix in 0..128) {
+            "Некорректный IPv6 CIDR в $category: $cidr"
+        }
+        "IP-CIDR6,$cidr"
     } else {
-        require(isValidIpv4(address) && prefix in 0..32) { "Некорректный IPv4 CIDR в $category: $cidr" }
-        "IP-CIDR,$cidr,no-resolve"
+        require(isValidIpv4(address) && prefix in 0..32) {
+            "Некорректный IPv4 CIDR в $category: $cidr"
+        }
+        "IP-CIDR,$cidr"
     }
 }
 
@@ -391,6 +400,23 @@ fun existingRuleCount(path: Path): Int? =
     } else {
         null
     }
+
+fun validateGeneratedRuleCount(
+    path: Path,
+    rules: List<String>
+) {
+    check(rules.isNotEmpty()) {
+        "Список ${path.fileName} неожиданно пуст"
+    }
+
+    val previousRuleCount = existingRuleCount(path)
+
+    if (previousRuleCount != null && previousRuleCount > 0) {
+        check(rules.size.toLong() * 100 >= previousRuleCount.toLong() * 70) {
+            "Список ${path.fileName} резко уменьшился: $previousRuleCount -> ${rules.size}"
+        }
+    }
+}
 
 fun regexRule(pattern: String, category: String): List<String> =
     when (pattern) {
@@ -522,19 +548,25 @@ check(dnsHosts.isNotEmpty()) { "DnsHosts неожиданно пуст" }
 val specs =
     listOf(
         RouteSpec(
-            fileName = "BLOCK.list",
+            name = "BLOCK",
+            domainFileName = "BLOCK_DOMAIN.list",
+            ipFileName = "BLOCK_IP.list",
             siteKey = "BlockSites",
             ipKey = "BlockIp",
             minimumRuleCount = 100
         ),
         RouteSpec(
-            fileName = "PROXY.list",
+            name = "PROXY",
+            domainFileName = "PROXY_DOMAIN.list",
+            ipFileName = "PROXY_IP.list",
             siteKey = "ProxySites",
             ipKey = "ProxyIp",
             minimumRuleCount = 50
         ),
         RouteSpec(
-            fileName = "DIRECT.list",
+            name = "DIRECT",
+            domainFileName = "DIRECT_DOMAIN.list",
+            ipFileName = "DIRECT_IP.list",
             siteKey = "DirectSites",
             ipKey = "DirectIp",
             minimumRuleCount = 1_000
@@ -544,42 +576,100 @@ val specs =
 val outputDirectory = Path.of("rules")
 val generatedFiles = linkedMapOf<Path, String>()
 val generatedRuleCounts = linkedMapOf<String, Int>()
+val generatedIpRuleSets = mutableMapOf<String, Boolean>()
 
 specs.forEach { spec ->
-    val siteCategories = jsonArray(routing, spec.siteKey).map { categoryName(it, "geosite") }
-    val ipCategories = jsonArray(routing, spec.ipKey).map { categoryName(it, "geoip") }
-    val rules =
-        buildList {
-            siteCategories.forEach { addAll(geositeRules(it, geositeBaseUrl)) }
-            ipCategories.forEach { addAll(geoipRules(it, geoipBaseUrl)) }
-        }.distinct().sorted()
+    val siteCategories =
+        jsonArray(routing, spec.siteKey)
+            .map { categoryName(it, "geosite") }
 
-    check(rules.size >= spec.minimumRuleCount) {
+    val ipCategories =
+        jsonArray(routing, spec.ipKey)
+            .map { categoryName(it, "geoip") }
+
+    val domainRules =
+        siteCategories
+            .flatMap { geositeRules(it, geositeBaseUrl) }
+            .distinct()
+            .sorted()
+
+    val ipRules =
+        ipCategories
+            .flatMap { geoipRules(it, geoipBaseUrl) }
+            .distinct()
+            .sorted()
+
+    check(domainRules.all { it.startsWith("DOMAIN") }) {
+        "${spec.domainFileName} содержит не DOMAIN-правило"
+    }
+
+    check(ipRules.all { it.startsWith("IP-CIDR") }) {
+        "${spec.ipFileName} содержит не IP-CIDR правило"
+    }
+
+    check(ipRules.none { it.endsWith(",no-resolve") }) {
+        "${spec.ipFileName} не должен содержать no-resolve: это IPIfNonMatch-фаза"
+    }
+
+    val totalRuleCount = domainRules.size + ipRules.size
+
+    check(totalRuleCount >= spec.minimumRuleCount) {
         """
-        Список ${spec.fileName} содержит только ${rules.size} правил.
+        Категория ${spec.name} содержит только $totalRuleCount правил.
+        DOMAIN: ${domainRules.size}
+        IP: ${ipRules.size}
         Минимум: ${spec.minimumRuleCount}
         """.trimIndent()
     }
-    val previousRuleCount = existingRuleCount(outputDirectory.resolve(spec.fileName))
-    if (previousRuleCount != null && previousRuleCount >= spec.minimumRuleCount) {
-        check(rules.size.toLong() * 100 >= previousRuleCount.toLong() * 70) {
-            "Список ${spec.fileName} резко уменьшился: $previousRuleCount -> ${rules.size}"
-        }
-    }
 
-    val content =
+    val domainPath = outputDirectory.resolve(spec.domainFileName)
+    val ipPath = outputDirectory.resolve(spec.ipFileName)
+
+    validateGeneratedRuleCount(domainPath, domainRules)
+
+    val domainContent =
         buildString {
             appendLine("# Автоматически сгенерировано из RoscomVPN")
             appendLine("# LastUpdated: $lastUpdated")
             appendLine("# Geosite ref: $geositeRef")
-            appendLine("# GeoIP ref: $geoipRef")
             appendLine("# Geosite: ${siteCategories.joinToString()}")
-            appendLine("# GeoIP: ${ipCategories.joinToString()}")
-            rules.forEach { appendLine(it) }
+            appendLine("# Phase: DOMAIN")
+            domainRules.forEach { appendLine(it) }
         }
 
-    generatedFiles[outputDirectory.resolve(spec.fileName)] = content
-    generatedRuleCounts[spec.fileName] = rules.size
+    generatedFiles[domainPath] = domainContent
+    generatedRuleCounts[spec.domainFileName] = domainRules.size
+
+    val hasIpCategories = ipCategories.isNotEmpty()
+
+    if (hasIpCategories) {
+        check(ipRules.isNotEmpty()) {
+            "${spec.ipFileName} должен содержать IP-правила, потому что ${spec.ipKey} не пуст"
+        }
+    }
+
+    generatedIpRuleSets[spec.name] = hasIpCategories
+
+    if (hasIpCategories) {
+        validateGeneratedRuleCount(ipPath, ipRules)
+
+        val ipContent =
+            buildString {
+                appendLine("# Автоматически сгенерировано из RoscomVPN")
+                appendLine("# LastUpdated: $lastUpdated")
+                appendLine("# GeoIP ref: $geoipRef")
+                appendLine("# GeoIP: ${ipCategories.joinToString()}")
+                appendLine("# Phase: IP")
+                ipRules.forEach { appendLine(it) }
+            }
+
+        generatedFiles[ipPath] = ipContent
+        generatedRuleCounts[spec.ipFileName] = ipRules.size
+    } else {
+        // Если раньше файл существовал, но upstream теперь убрал IP-правила,
+        // удаляем устаревший файл.
+        Files.deleteIfExists(ipPath)
+    }
 }
 
 val directSiteCategories = jsonArray(routing, "DirectSites").map { categoryName(it, "geosite") }
@@ -602,7 +692,7 @@ val ipCheckProxyDomains =
         "iplocate.io",
         "showip.net"
     )
-val protectedAlwaysRealIpZones = ipCheckProxyDomains
+val protectedAlwaysRealIpZones = ipCheckProxyDomains + setOf("yandexcloud.net")
 dnsHosts.keys.forEach { host ->
     check(protectedAlwaysRealIpZones.none { zone -> alwaysRealPatternOverlapsZone(host, zone) }) {
         "DnsHosts-домен $host конфликтует с защищённой зоной always-real-ip"
@@ -631,9 +721,34 @@ dnsHosts.keys.forEach { host ->
     }
 }
 
+val additionalRejectUrl =
+    "https://raw.githubusercontent.com/zeklop/shadowrocket-configs/main/REJECT.list"
+
+val additionalRejectRules =
+    normalizedLines(download(additionalRejectUrl))
+
+val allowedDomainRulePrefixes =
+    listOf(
+        "DOMAIN,",
+        "DOMAIN-SUFFIX,",
+        "DOMAIN-KEYWORD,",
+        "DOMAIN-WILDCARD,"
+    )
+
+check(
+    additionalRejectRules.all { rule ->
+        allowedDomainRulePrefixes.any { prefix -> rule.startsWith(prefix) }
+    }
+) {
+    "В REJECT.list появилось не DOMAIN-правило. " +
+            "Такой список нельзя размещать в DOMAIN-фазе IPIfNonMatch."
+}
+
 val templatePath = Path.of("shadowrocket.template.conf")
 val alwaysRealIpMarker = "{{ROSCOMVPN_WHITELIST_ALWAYS_REAL_IP}}"
 val dnsHostsSectionMarker = "{{ROSCOMVPN_DNS_HOSTS_SECTION}}"
+val blockIpRuleSetMarker = "{{ROSCOMVPN_BLOCK_IP_RULESET}}"
+val proxyIpRuleSetMarker = "{{ROSCOMVPN_PROXY_IP_RULESET}}"
 val configTemplate = Files.readString(templatePath)
 val templateRuleLines = configTemplate.lineSequence().map { it.trim() }.toSet()
 ipCheckProxyDomains.forEach { domain ->
@@ -647,6 +762,21 @@ val dnsHostsSection =
         appendLine("[Host]")
         dnsHosts.forEach { (host, address) -> appendLine("$host = $address") }
     }.trimEnd()
+
+val blockIpRuleSet =
+    if (generatedIpRuleSets["BLOCK"] == true) {
+        "RULE-SET,https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/rules/BLOCK_IP.list,REJECT"
+    } else {
+        ""
+    }
+
+val proxyIpRuleSet =
+    if (generatedIpRuleSets["PROXY"] == true) {
+        "RULE-SET,https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/rules/PROXY_IP.list,PROXY"
+    } else {
+        ""
+    }
+
 val configWithAlwaysRealIp =
     replaceUniqueMarker(
         template = configTemplate,
@@ -654,11 +784,28 @@ val configWithAlwaysRealIp =
         replacement = shadowrocketAlwaysRealIpPatterns.joinToString(", "),
         templatePath = templatePath
     )
-val shadowrocketConfig =
+
+val configWithDnsHosts =
     replaceUniqueMarker(
         template = configWithAlwaysRealIp,
         marker = dnsHostsSectionMarker,
         replacement = dnsHostsSection,
+        templatePath = templatePath
+    )
+
+val configWithBlockIp =
+    replaceUniqueMarker(
+        template = configWithDnsHosts,
+        marker = blockIpRuleSetMarker,
+        replacement = blockIpRuleSet,
+        templatePath = templatePath
+    )
+
+val shadowrocketConfig =
+    replaceUniqueMarker(
+        template = configWithBlockIp,
+        marker = proxyIpRuleSetMarker,
+        replacement = proxyIpRuleSet,
         templatePath = templatePath
     )
 val generatedConfigRuleLines =
@@ -676,37 +823,143 @@ check("dns-direct-fallback-proxy = false" in generatedConfigLines) {
 check("private-ip-answer = true" in generatedConfigLines) {
     "Shadowrocket должен принимать private DNS-ответы для IPIfNonMatch"
 }
-val ipIfNonMatchPrivateRules =
-    listOf(
-        "IP-CIDR,10.0.0.0/8,DIRECT",
-        "IP-CIDR,100.64.0.0/10,DIRECT",
-        "IP-CIDR,127.0.0.0/8,DIRECT",
-        "IP-CIDR,169.254.0.0/16,DIRECT",
-        "IP-CIDR,172.16.0.0/12,DIRECT",
-        "IP-CIDR,192.168.0.0/16,DIRECT"
+
+val blockDomainIndex =
+    generatedConfigRuleLines.indexOf(
+        "RULE-SET,https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/rules/BLOCK_DOMAIN.list,REJECT"
     )
-ipIfNonMatchPrivateRules.forEach { rule ->
-    check(rule in generatedConfigLines) {
-        "В shadowrocket.conf отсутствует private IPIfNonMatch-правило: $rule"
-    }
-}
-val firstIpIfNonMatchRuleIndex = generatedConfigRuleLines.indexOf(ipIfNonMatchPrivateRules.first())
-val lastDomainFallbackIndex = generatedConfigRuleLines.indexOf("DOMAIN-SUFFIX,by,DIRECT")
-val geoIpFallbackIndex = generatedConfigRuleLines.indexOf("GEOIP,RU,DIRECT")
-val finalProxyIndex = generatedConfigRuleLines.indexOf("FINAL,PROXY")
-check(lastDomainFallbackIndex >= 0 && geoIpFallbackIndex >= 0 && finalProxyIndex >= 0) {
-    "В shadowrocket.conf отсутствуют обязательные fallback-правила"
-}
+
+val proxyDomainIndex =
+    generatedConfigRuleLines.indexOf(
+        "RULE-SET,https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/rules/PROXY_DOMAIN.list,PROXY"
+    )
+
+val reFilterDomainIndex =
+    generatedConfigRuleLines.indexOf(
+        "DOMAIN-SET,https://raw.githubusercontent.com/1andrevich/Re-filter-lists/main/domains_all.lst,PROXY"
+    )
+
+val directDomainIndex =
+    generatedConfigRuleLines.indexOf(
+        "RULE-SET,https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/rules/DIRECT_DOMAIN.list,DIRECT"
+    )
+
+val nationalZoneFallbackIndex =
+    generatedConfigRuleLines.indexOf("DOMAIN-SUFFIX,by,DIRECT")
+
+val blockIpIndex =
+    generatedConfigRuleLines.indexOf(
+        "RULE-SET,https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/rules/BLOCK_IP.list,REJECT"
+    )
+
+val proxyIpIndex =
+    generatedConfigRuleLines.indexOf(
+        "RULE-SET,https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/rules/PROXY_IP.list,PROXY"
+    )
+
+val reFilterIpIndex =
+    generatedConfigRuleLines.indexOf(
+        "RULE-SET,https://raw.githubusercontent.com/1andrevich/Re-filter-lists/main/ipsum.lst,PROXY"
+    )
+
+val directIpIndex =
+    generatedConfigRuleLines.indexOf(
+        "RULE-SET,https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/rules/DIRECT_IP.list,DIRECT"
+    )
+
+val geoIpFallbackIndex =
+    generatedConfigRuleLines.indexOf("GEOIP,RU,DIRECT")
+
+val finalProxyIndex =
+    generatedConfigRuleLines.indexOf("FINAL,PROXY")
+
 check(
-    lastDomainFallbackIndex < firstIpIfNonMatchRuleIndex &&
-        firstIpIfNonMatchRuleIndex < geoIpFallbackIndex
+    listOf(
+        blockDomainIndex,
+        proxyDomainIndex,
+        reFilterDomainIndex,
+        directDomainIndex,
+        nationalZoneFallbackIndex,
+        reFilterIpIndex,
+        directIpIndex,
+        geoIpFallbackIndex,
+        finalProxyIndex
+    ).all { it >= 0 }
 ) {
-    "Private IPIfNonMatch-правила должны идти после доменных правил и до GEOIP,RU"
+    "В shadowrocket.conf отсутствуют обязательные IPIfNonMatch-правила"
 }
-check(geoIpFallbackIndex < finalProxyIndex) {
-    "GEOIP,RU должен идти до FINAL,PROXY"
+
+check(
+    (generatedIpRuleSets["BLOCK"] == true) == (blockIpIndex >= 0)
+) {
+    "BLOCK_IP RULE-SET не соответствует текущему BlockIp"
 }
+
+check(
+    (generatedIpRuleSets["PROXY"] == true) == (proxyIpIndex >= 0)
+) {
+    "PROXY_IP RULE-SET не соответствует текущему ProxyIp"
+}
+
+val domainPhaseIndices =
+    listOf(
+        blockDomainIndex,
+        proxyDomainIndex,
+        reFilterDomainIndex,
+        directDomainIndex,
+        nationalZoneFallbackIndex
+    )
+
+check(
+    domainPhaseIndices.zipWithNext().all { (first, second) ->
+        first < second
+    }
+) {
+    "Нарушен порядок DOMAIN-фазы"
+}
+
+val ipPhaseIndices =
+    buildList {
+        if (blockIpIndex >= 0) {
+            add(blockIpIndex)
+        }
+
+        if (proxyIpIndex >= 0) {
+            add(proxyIpIndex)
+        }
+
+        add(reFilterIpIndex)
+        add(directIpIndex)
+        add(geoIpFallbackIndex)
+        add(finalProxyIndex)
+    }
+
+check(
+    nationalZoneFallbackIndex < ipPhaseIndices.first()
+) {
+    "IP-фаза должна начинаться только после всех DOMAIN-правил"
+}
+
+check(
+    ipPhaseIndices.zipWithNext().all { (first, second) ->
+        first < second
+    }
+) {
+    "Нарушен порядок IPIfNonMatch/fallback-фазы"
+}
+
 generatedFiles[Path.of("shadowrocket.conf")] = shadowrocketConfig
+
+val legacyRuleFiles =
+    listOf(
+        "BLOCK.list",
+        "PROXY.list",
+        "DIRECT.list"
+    )
+
+legacyRuleFiles.forEach { fileName ->
+    Files.deleteIfExists(outputDirectory.resolve(fileName))
+}
 
 Files.createDirectories(outputDirectory)
 generatedFiles.forEach { (path, content) -> Files.writeString(path, content) }
