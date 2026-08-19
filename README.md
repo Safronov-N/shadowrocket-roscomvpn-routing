@@ -1,7 +1,10 @@
 # Shadowrocket RoscomVPN Routing
 
-Автообновляемая адаптация профиля RoscomVPN для Shadowrocket. Репозиторий преобразует категории
-`HAPP/DEFAULT.JSON` в нативные списки Shadowrocket и публикует готовый конфиг без VPN-серверов и секретов.
+Автообновляемая адаптация профиля RoscomVPN для Shadowrocket.
+
+Репозиторий преобразует категории из `HAPP/DEFAULT.JSON` в нативные списки правил Shadowrocket и публикует готовый конфиг без VPN-серверов, ключей и учётных данных.
+
+Основная цель — максимально сохранить логику RoscomVPN, включая `DomainStrategy=IPIfNonMatch`, при использовании Shadowrocket.
 
 ## Установка
 
@@ -11,100 +14,280 @@
 https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main/shadowrocket.conf
 ```
 
-Выберите своё VPN-подключение, примените конфиг и оставьте режим маршрутизации **Config**. Для автоматического
-обновления включите фоновое обновление конфигурации в Shadowrocket и Background App Refresh в настройках iOS.
+Выберите своё VPN-подключение, примените конфиг и оставьте режим маршрутизации **Config**.
 
-Конфиг использует текущий выбранный сервер: действие `PROXY` не содержит адресов, ключей или учётных данных.
+Для автоматического обновления включите фоновое обновление конфигурации в Shadowrocket и Background App Refresh в настройках iOS.
+
+Конфиг использует текущий выбранный VPN-сервер: действие `PROXY` не содержит адресов серверов, ключей или других секретов.
 
 ## Маршрутизация
 
-| Трафик | Действие |
-| --- | --- |
-| `BlockSites` / `BlockIp`, рекламные списки | `REJECT` |
-| `ProxySites` / `ProxyIp`, Re-filter, проверки внешнего IP | `PROXY` |
-| `DirectSites` / `DirectIp`, whitelist, национальные зоны, остальные IP РФ | `DIRECT` |
-| Частные и NetBird-сети | исключены из TUN Shadowrocket |
-| Всё остальное | `PROXY` |
+Правила разделены на две основные фазы:
 
-Порядок правил важен: блокировки и принудительный прокси проверяются до `DIRECT` и `GEOIP,RU`.
+1. DOMAIN — маршрутизация по доменному имени.
+2. IP — fallback по реальному IP, если ни одно доменное правило не совпало.
+
+Это повторяет основную логику `DomainStrategy=IPIfNonMatch`.
+
+### DOMAIN phase
+
+Порядок:
+
+1. `BlockSites` RoscomVPN → `REJECT`
+2. дополнительный рекламный `REJECT.list` → `REJECT`
+3. сервисы проверки внешнего IP → `PROXY`
+4. `ProxySites` RoscomVPN → `PROXY`
+5. доменные списки Re-filter → `PROXY`
+6. `DirectSites` RoscomVPN → `DIRECT`
+7. национальные зоны `.ru`, `.рф`, `.su`, `.by` → `DIRECT`
+
+Если домен совпал на этом этапе, дальнейшая IP-проверка для него не требуется.
+
+Например, если `rutube.ru` находится в `DirectSites`, он получает `DIRECT`, даже если один из его IP-адресов присутствует в стороннем IP-списке блокировок.
+
+### IP phase
+
+Если ни одно DOMAIN-правило не совпало, Shadowrocket разрешает hostname в реальный IP и продолжает проверку по IP-правилам.
+
+Порядок:
+
+1. `BlockIp` RoscomVPN → `REJECT`, если категория присутствует
+2. `ProxyIp` RoscomVPN → `PROXY`, если категория присутствует
+3. IP-списки Re-filter → `PROXY`
+4. `DirectIp` RoscomVPN → `DIRECT`
+5. `GEOIP,RU` → `DIRECT`
+6. всё остальное → `PROXY`
+
+IP-правила этой фазы намеренно генерируются **без `no-resolve`**, чтобы они могли участвовать в IP fallback после промаха DOMAIN-фазы.
+
+### Национальные зоны
+
+Дополнительные правила:
+
+```text
+DOMAIN-SUFFIX,ru,DIRECT
+DOMAIN-SUFFIX,xn--p1ai,DIRECT
+DOMAIN-SUFFIX,su,DIRECT
+DOMAIN-SUFFIX,by,DIRECT
+```
+
+являются политикой этого профиля поверх RoscomVPN.
+
+Это означает, что обычный `.ru`, `.рф`, `.su` или `.by` домен, который не был ранее явно отправлен в `REJECT` или `PROXY`, идёт напрямую и не доходит до IP fallback.
+
+## Генерируемые ruleset'ы
+
+Генератор создаёт отдельные файлы для DOMAIN и IP правил:
+
+```text
+rules/BLOCK_DOMAIN.list
+rules/PROXY_DOMAIN.list
+rules/DIRECT_DOMAIN.list
+rules/DIRECT_IP.list
+```
+
+Дополнительно, если соответствующие категории присутствуют в актуальном `HAPP/DEFAULT.JSON`, создаются:
+
+```text
+rules/BLOCK_IP.list
+rules/PROXY_IP.list
+```
+
+Если `BlockIp` или `ProxyIp` в upstream пусты, соответствующий файл не создаётся и `RULE-SET` не добавляется в `shadowrocket.conf`.
+
+Старые объединённые:
+
+```text
+BLOCK.list
+PROXY.list
+DIRECT.list
+```
+
+больше не используются.
+
+## Локальные и private-сети
+
+До основной DOMAIN-фазы расположены ранние правила:
+
+```text
+IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+IP-CIDR,169.254.0.0/16,DIRECT,no-resolve
+IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+```
+
+`no-resolve` здесь используется намеренно: эти правила предназначены для соединений, где IP уже известен, и не должны вызывать преждевременный DNS-resolve до DOMAIN-фазы.
+
+Private IP-категории RoscomVPN также входят в `DIRECT_IP.list` и участвуют в полноценной IP-фазе уже без `no-resolve`.
 
 ## Автообновление
 
 GitHub Actions каждые 6 часов:
 
 1. Загружает актуальный `HAPP/DEFAULT.JSON`.
-2. Проверяет ожидаемые `GlobalProxy`, `RouteOrder` и `DomainStrategy=IPIfNonMatch`.
-3. Берёт версии geosite и geoip из URL самого профиля, а не из плавающей ветки.
-4. Генерирует `rules/BLOCK.list`, `rules/PROXY.list` и `rules/DIRECT.list`.
-5. Переносит `DnsHosts` в `[Host]`, а совместимую часть `geosite:whitelist` — в `always-real-ip`.
-6. Проверяет структуру, CIDR, домены и защитные DNS-исключения перед публикацией.
+2. Проверяет ожидаемые:
+   - `GlobalProxy=true`
+   - `RouteOrder=block-proxy-direct`
+   - `DomainStrategy=IPIfNonMatch`
+3. Получает закреплённые версии geosite и geoip из URL самого RoscomVPN-профиля.
+4. Генерирует отдельные DOMAIN и IP ruleset'ы.
+5. Не создаёт `BLOCK_IP` / `PROXY_IP`, если соответствующие upstream-категории пусты.
+6. Переносит `DnsHosts` в секцию `[Host]`.
+7. Преобразует совместимую часть `geosite:whitelist` в `always-real-ip`.
+8. Проверяет структуру доменов, CIDR, порядок DOMAIN/IP-фаз и DNS-защиту.
+9. Проверяет, что дополнительный `REJECT.list`, расположенный в DOMAIN-фазе, содержит только доменные правила.
+10. Публикует изменения только после успешной генерации и проверок.
 
-Если upstream меняется несовместимо или отдаёт некорректные данные, сборка завершается ошибкой. Последняя рабочая
-версия остаётся доступной.
+Если upstream меняется несовместимо или отдаёт некорректные данные, сборка завершается ошибкой, а последняя рабочая опубликованная версия остаётся доступной.
 
 ## DNS, Fake-IP и whitelist
 
-Обычные домены используют Fake-IP. Whitelist остаётся нужен, хотя `.ru` уже идёт напрямую: в категории есть
-не-RU и внутренние домены, которым Shadowrocket должен вернуть реальный адрес, чтобы соединение принял NetBird
-или другой параллельный VPN. Глобальный `always-real-ip = *` намеренно не используется.
+Основной DNS:
 
-Для эквивалентности HAPP `IPIfNonMatch` после всех доменных правил расположен отдельный private-IP fallback без
-`no-resolve`. Неизвестный домен сначала проверяется по доменным спискам, затем разрешается в реальный IP. Ответ из
-`10.0.0.0/8`, `100.64.0.0/10`, `127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12` или `192.168.0.0/16` получает
-`DIRECT` и передаётся системному маршруту. Ранние private-IP правила с `no-resolve` остаются для запросов по IP.
+```text
+tls://common.dot.dns.yandex.net
+```
 
-Домены проверок внешнего IP исключаются из `always-real-ip`, потому что они принудительно идут через `PROXY`.
-Зона `mdb.yandexcloud.net` также исключена: выбор её приватного DNS решается scoped resolver, а не Fake-IP.
+Fallback DNS:
 
-Основной DNS — публичный Yandex DoT. Ошибка DNS для `DIRECT` не переключает приватное имя на proxy resolver.
-Записи `DnsHosts` из RoscomVPN генерируются в `[Host]` автоматически.
+```text
+https://dns.google/dns-query#proxy
+https://cloudflare-dns.com/dns-query#proxy
+system
+```
+
+Для DIRECT DNS отключён переход на proxy fallback:
+
+```text
+dns-direct-fallback-proxy = false
+```
+
+Также включено:
+
+```text
+private-ip-answer = true
+```
+
+чтобы Shadowrocket принимал private DNS-ответы для локальных сетей и параллельных VPN.
+
+Обычные домены могут использовать Fake-IP.
+
+Совместимые домены из `geosite:whitelist`, а также необходимые записи `DnsHosts`, автоматически добавляются в:
+
+```text
+always-real-ip
+```
+
+Глобальный:
+
+```text
+always-real-ip = *
+```
+
+намеренно не используется.
+
+Домены сервисов проверки внешнего IP исключаются из `always-real-ip`, поскольку они принудительно маршрутизируются через `PROXY`.
+
+## Проверка внешнего IP
+
+Следующие сервисы всегда отправляются через VPN:
+
+```text
+2ip.ru
+checkip.amazonaws.com
+ifconfig.me
+ip.sb
+ipapi.is
+ipify.org
+iplocate.io
+showip.net
+```
+
+Это позволяет использовать их для проверки фактического внешнего адреса прокси независимо от остальных DIRECT-правил.
 
 ## Private Yandex MDB через NetBird
 
-Для `*.mdb.yandexcloud.net` одного `always-real-ip` или `[Host]` недостаточно: публичный DNS не знает private A,
-а статический IP ломает автоматический failover master. Нужен DNS нужной Yandex Cloud VPC.
+Для `*.mdb.yandexcloud.net` одного `always-real-ip` или `[Host]` недостаточно: публичный DNS не знает private A-записи, а статический IP ломает автоматический failover master.
+
+Нужен DNS соответствующей Yandex Cloud VPC.
 
 Предпочтительный централизованный вариант — NetBird Nameserver Group:
 
 - DNS-серверы нужной VPC;
 - Match Domain `mdb.yandexcloud.net`;
 - Distribution Group нужных клиентов;
-- маршрут к DNS IP и разрешённые TCP/UDP 53 через routing peer.
+- маршрут к DNS IP;
+- разрешённые TCP/UDP 53 через routing peer.
 
-Для отдельного Mac можно установить scoped resolver по инструкции
-[`examples/macos-resolver/README.md`](examples/macos-resolver/README.md). Он направляет только эту DNS-зону через
-NetBird. Профиль уже содержит ранний `DIRECT`, разрешает private DNS-ответы и исключает `10.0.0.0/8` из TUN.
+Для отдельного Mac можно установить scoped resolver по инструкции:
 
-Scoped resolver используют только приложения, работающие через системный resolver macOS. `dig`, некоторые
-runtime и собственные DNS-клиенты могут его обходить, поэтому проверяйте разрешение из целевого приложения.
-На iOS файл `/etc/resolver` недоступен — используйте NetBird Nameserver Group.
+[`examples/macos-resolver/README.md`](examples/macos-resolver/README.md)
+
+Он направляет только `mdb.yandexcloud.net` через указанный private DNS.
+
+Профиль Shadowrocket:
+
+- разрешает private DNS-ответы;
+- исключает private сети из TUN;
+- не отправляет ошибку DIRECT-DNS в proxy resolver.
+
+Scoped resolver используют только приложения, работающие через системный resolver macOS.
+
+`dig`, некоторые runtime и приложения со встроенным DNS-клиентом могут его обходить.
+
+На iOS `/etc/resolver` недоступен — используйте NetBird Nameserver Group.
 
 ## GeoLite2
 
-Для более свежей Country-базы можно указать в **Settings → GeoLite2 Database → Country URL**:
+Для более свежей Country-базы можно указать в:
+
+**Settings → GeoLite2 Database → Country URL**
 
 ```text
 https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
 ```
 
-Поле ASN можно оставить пустым. Без внешнего URL используется встроенная база Shadowrocket.
+Поле ASN можно оставить пустым.
+
+Без внешнего URL Shadowrocket использует встроенную GeoLite2 Country-базу.
+
+`GEOIP,RU,DIRECT` расположен в конце IP-фазы и служит дополнительным DIRECT fallback после RoscomVPN и Re-filter IP-правил.
 
 ## Ограничения
 
-- Обобщённое regexp для односегментных private-hostname из `geosite:private` нельзя точно выразить текущими
-  правилами Shadowrocket, поэтому оно пропускается. Полные private FQDN и IP-маршруты продолжают работать.
-- Re-filter и дополнительный рекламный список загружаются клиентом напрямую из их веток `main`; их обновления
-  не проходят через генератор этого репозитория.
-- Scoped DNS не заменяет NetBird: resolver выбирает DNS, а NetBird обеспечивает маршрут и доступ.
+- Обобщённое regexp для односегментных private-hostname из `geosite:private` нельзя точно выразить используемыми правилами Shadowrocket, поэтому такое regexp пропускается.
+- Полные private FQDN и private IP-маршруты продолжают работать.
+- Re-filter загружается Shadowrocket напрямую из ветки `main`, поэтому изменения этих списков не проходят через генератор репозитория.
+- Дополнительный рекламный `REJECT.list` также загружается из внешнего репозитория, но генератор проверяет, что его текущий формат остаётся совместим с DOMAIN-фазой.
+- Национальные `.ru/.рф/.su/.by` правила являются дополнительной политикой данного профиля, а не прямым преобразованием отдельной категории RoscomVPN.
+- Scoped DNS не заменяет NetBird: resolver выбирает DNS-сервер, а NetBird обеспечивает маршрут и сетевой доступ.
 
 ## Разработка
+
+Запуск генератора:
 
 ```bash
 kotlinc -script scripts/generate.main.kts
 ```
 
-Сгенерированные `rules/*.list` и `shadowrocket.conf` не редактируются вручную. Pull request проверяется повторной
-генерацией; расписание публикует только реальные изменения.
+Сгенерированные:
+
+```text
+rules/*.list
+shadowrocket.conf
+```
+
+не редактируются вручную.
+
+Pull request проверяется повторной генерацией.
+
+GitHub Actions также проверяет, что после запуска генератора committed-файлы совпадают с результатом генерации:
+
+```bash
+git diff --exit-code -- rules shadowrocket.conf
+```
 
 ## Источники и лицензии
 
