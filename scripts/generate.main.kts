@@ -484,6 +484,9 @@ check(jsonString(routing, "GlobalProxy") == "true") {
 check(jsonString(routing, "RouteOrder") == "block-proxy-direct") {
     "Поддерживается только RouteOrder=block-proxy-direct"
 }
+check(jsonString(routing, "DomainStrategy") == "IPIfNonMatch") {
+    "Поддерживается только DomainStrategy=IPIfNonMatch"
+}
 
 val geositeRef =
     pinnedRef(
@@ -583,6 +586,10 @@ val directSiteCategories = jsonArray(routing, "DirectSites").map { categoryName(
 check("whitelist" in directSiteCategories) {
     "В DirectSites отсутствует обязательная категория geosite:whitelist"
 }
+val directIpCategories = jsonArray(routing, "DirectIp").map { categoryName(it, "geoip") }
+check("private" in directIpCategories) {
+    "В DirectIp отсутствует обязательная категория geoip:private"
+}
 
 val ipCheckProxyDomains =
     setOf(
@@ -654,15 +661,53 @@ val shadowrocketConfig =
         replacement = dnsHostsSection,
         templatePath = templatePath
     )
-val generatedConfigLines = shadowrocketConfig.lineSequence().map { it.trim() }.toSet()
+val generatedConfigRuleLines =
+    shadowrocketConfig
+        .lineSequence()
+        .map { it.trim() }
+        .toList()
+val generatedConfigLines = generatedConfigRuleLines.toSet()
 check("{{ROSCOMVPN_" !in shadowrocketConfig) {
     "В shadowrocket.conf остался незаменённый marker"
 }
 check("dns-direct-fallback-proxy = false" in generatedConfigLines) {
     "DIRECT DNS не должен переключаться на proxy fallback"
 }
+check("private-ip-answer = true" in generatedConfigLines) {
+    "Shadowrocket должен принимать private DNS-ответы для IPIfNonMatch"
+}
 check("DOMAIN-SUFFIX,mdb.yandexcloud.net,DIRECT" in generatedConfigLines) {
     "В shadowrocket.conf отсутствует раннее DIRECT-правило Yandex MDB"
+}
+val ipIfNonMatchPrivateRules =
+    listOf(
+        "IP-CIDR,10.0.0.0/8,DIRECT",
+        "IP-CIDR,100.64.0.0/10,DIRECT",
+        "IP-CIDR,127.0.0.0/8,DIRECT",
+        "IP-CIDR,169.254.0.0/16,DIRECT",
+        "IP-CIDR,172.16.0.0/12,DIRECT",
+        "IP-CIDR,192.168.0.0/16,DIRECT"
+    )
+ipIfNonMatchPrivateRules.forEach { rule ->
+    check(rule in generatedConfigLines) {
+        "В shadowrocket.conf отсутствует private IPIfNonMatch-правило: $rule"
+    }
+}
+val firstIpIfNonMatchRuleIndex = generatedConfigRuleLines.indexOf(ipIfNonMatchPrivateRules.first())
+val lastDomainFallbackIndex = generatedConfigRuleLines.indexOf("DOMAIN-SUFFIX,by,DIRECT")
+val geoIpFallbackIndex = generatedConfigRuleLines.indexOf("GEOIP,RU,DIRECT")
+val finalProxyIndex = generatedConfigRuleLines.indexOf("FINAL,PROXY")
+check(lastDomainFallbackIndex >= 0 && geoIpFallbackIndex >= 0 && finalProxyIndex >= 0) {
+    "В shadowrocket.conf отсутствуют обязательные fallback-правила"
+}
+check(
+    lastDomainFallbackIndex < firstIpIfNonMatchRuleIndex &&
+        firstIpIfNonMatchRuleIndex < geoIpFallbackIndex
+) {
+    "Private IPIfNonMatch-правила должны идти после доменных правил и до GEOIP,RU"
+}
+check(geoIpFallbackIndex < finalProxyIndex) {
+    "GEOIP,RU должен идти до FINAL,PROXY"
 }
 generatedFiles[Path.of("shadowrocket.conf")] = shadowrocketConfig
 

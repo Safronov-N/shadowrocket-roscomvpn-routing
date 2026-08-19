@@ -33,7 +33,7 @@ https://raw.githubusercontent.com/Safronov-N/shadowrocket-roscomvpn-routing/main
 GitHub Actions каждые 6 часов:
 
 1. Загружает актуальный `HAPP/DEFAULT.JSON`.
-2. Проверяет ожидаемые `GlobalProxy` и `RouteOrder`.
+2. Проверяет ожидаемые `GlobalProxy`, `RouteOrder` и `DomainStrategy=IPIfNonMatch`.
 3. Берёт версии geosite и geoip из URL самого профиля, а не из плавающей ветки.
 4. Генерирует `rules/BLOCK.list`, `rules/PROXY.list` и `rules/DIRECT.list`.
 5. Переносит `DnsHosts` в `[Host]`, а совместимую часть `geosite:whitelist` — в `always-real-ip`.
@@ -47,6 +47,11 @@ GitHub Actions каждые 6 часов:
 Обычные домены используют Fake-IP. Whitelist остаётся нужен, хотя `.ru` уже идёт напрямую: в категории есть
 не-RU и внутренние домены, которым Shadowrocket должен вернуть реальный адрес, чтобы соединение принял NetBird
 или другой параллельный VPN. Глобальный `always-real-ip = *` намеренно не используется.
+
+Для эквивалентности HAPP `IPIfNonMatch` после всех доменных правил расположен отдельный private-IP fallback без
+`no-resolve`. Неизвестный домен сначала проверяется по доменным спискам, затем разрешается в реальный IP. Ответ из
+`10.0.0.0/8`, `100.64.0.0/10`, `127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12` или `192.168.0.0/16` получает
+`DIRECT` и передаётся системному маршруту. Ранние private-IP правила с `no-resolve` остаются для запросов по IP.
 
 Домены проверок внешнего IP исключаются из `always-real-ip`, потому что они принудительно идут через `PROXY`.
 Зона `mdb.yandexcloud.net` также исключена: выбор её приватного DNS решается scoped resolver, а не Fake-IP.
