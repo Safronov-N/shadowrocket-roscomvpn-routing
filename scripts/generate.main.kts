@@ -602,7 +602,7 @@ val ipCheckProxyDomains =
         "iplocate.io",
         "showip.net"
     )
-val protectedAlwaysRealIpZones = ipCheckProxyDomains + "mdb.yandexcloud.net"
+val protectedAlwaysRealIpZones = ipCheckProxyDomains
 dnsHosts.keys.forEach { host ->
     check(protectedAlwaysRealIpZones.none { zone -> alwaysRealPatternOverlapsZone(host, zone) }) {
         "DnsHosts-домен $host конфликтует с защищённой зоной always-real-ip"
@@ -675,9 +675,6 @@ check("dns-direct-fallback-proxy = false" in generatedConfigLines) {
 }
 check("private-ip-answer = true" in generatedConfigLines) {
     "Shadowrocket должен принимать private DNS-ответы для IPIfNonMatch"
-}
-check("DOMAIN-SUFFIX,mdb.yandexcloud.net,DIRECT" in generatedConfigLines) {
-    "В shadowrocket.conf отсутствует раннее DIRECT-правило Yandex MDB"
 }
 val ipIfNonMatchPrivateRules =
     listOf(
