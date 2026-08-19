@@ -692,7 +692,7 @@ val ipCheckProxyDomains =
         "iplocate.io",
         "showip.net"
     )
-val protectedAlwaysRealIpZones = ipCheckProxyDomains
+val protectedAlwaysRealIpZones = ipCheckProxyDomains + setOf("yandexcloud.net")
 dnsHosts.keys.forEach { host ->
     check(protectedAlwaysRealIpZones.none { zone -> alwaysRealPatternOverlapsZone(host, zone) }) {
         "DnsHosts-домен $host конфликтует с защищённой зоной always-real-ip"
