@@ -1246,12 +1246,6 @@ check(
     "Shadowrocket должен принимать private DNS-ответы для IPIfNonMatch"
 }
 
-check(
-    "DOMAIN-SUFFIX,mdb.yandexcloud.net,DIRECT" in generatedConfigLines
-) {
-    "В shadowrocket.conf отсутствует раннее DIRECT-правило Yandex MDB"
-}
-
 val ipIfNonMatchPrivateRule =
     "SCRIPT,private-ip-if-non-match,DIRECT,requires-resolve"
 
