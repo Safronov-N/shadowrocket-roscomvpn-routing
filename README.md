@@ -207,38 +207,6 @@ showip.net
 
 Это позволяет использовать их для проверки фактического внешнего адреса прокси независимо от остальных DIRECT-правил.
 
-## Private Yandex MDB через NetBird
-
-Для `*.mdb.yandexcloud.net` одного `always-real-ip` или `[Host]` недостаточно: публичный DNS не знает private A-записи, а статический IP ломает автоматический failover master.
-
-Нужен DNS соответствующей Yandex Cloud VPC.
-
-Предпочтительный централизованный вариант — NetBird Nameserver Group:
-
-- DNS-серверы нужной VPC;
-- Match Domain `mdb.yandexcloud.net`;
-- Distribution Group нужных клиентов;
-- маршрут к DNS IP;
-- разрешённые TCP/UDP 53 через routing peer.
-
-Для отдельного Mac можно установить scoped resolver по инструкции:
-
-[`examples/macos-resolver/README.md`](examples/macos-resolver/README.md)
-
-Он направляет только `mdb.yandexcloud.net` через указанный private DNS.
-
-Профиль Shadowrocket:
-
-- разрешает private DNS-ответы;
-- исключает private сети из TUN;
-- не отправляет ошибку DIRECT-DNS в proxy resolver.
-
-Scoped resolver используют только приложения, работающие через системный resolver macOS.
-
-`dig`, некоторые runtime и приложения со встроенным DNS-клиентом могут его обходить.
-
-На iOS `/etc/resolver` недоступен — используйте NetBird Nameserver Group.
-
 ## GeoLite2
 
 Для более свежей Country-базы можно указать в:
@@ -262,7 +230,7 @@ https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
 - Re-filter загружается Shadowrocket напрямую из ветки `main`, поэтому изменения этих списков не проходят через генератор репозитория.
 - Дополнительный рекламный `REJECT.list` также загружается из внешнего репозитория, но генератор проверяет, что его текущий формат остаётся совместим с DOMAIN-фазой.
 - Национальные `.ru/.рф/.su/.by` правила являются дополнительной политикой данного профиля, а не прямым преобразованием отдельной категории RoscomVPN.
-- Scoped DNS не заменяет NetBird: resolver выбирает DNS-сервер, а NetBird обеспечивает маршрут и сетевой доступ.
+- Scoped DNS только выбирает DNS-сервер; маршрут и сетевой доступ должны быть настроены отдельно.
 
 ## Разработка
 
@@ -295,7 +263,5 @@ git diff --exit-code -- rules shadowrocket.conf
 - [RoscomVPN geosite](https://github.com/hydraponique/roscomvpn-geosite)
 - [RoscomVPN geoip](https://github.com/hydraponique/roscomvpn-geoip)
 - [Re-filter](https://github.com/1andrevich/Re-filter-lists)
-- [NetBird DNS](https://docs.netbird.io/manage/dns/internal-dns-servers)
-- [Yandex Cloud MDB DNS](https://yandex.cloud/en/docs/managed-postgresql/qa/errors)
 
 Уведомления о лицензиях сторонних данных находятся в [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
