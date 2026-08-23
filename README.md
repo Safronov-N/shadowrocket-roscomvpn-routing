@@ -207,19 +207,19 @@ showip.net
 
 Это позволяет использовать их для проверки фактического внешнего адреса прокси независимо от остальных DIRECT-правил.
 
-## Private Yandex MDB через NetBird
+## Private Yandex MDB
 
 Для `*.mdb.yandexcloud.net` одного `always-real-ip` или `[Host]` недостаточно: публичный DNS не знает private A-записи, а статический IP ломает автоматический failover master.
 
 Нужен DNS соответствующей Yandex Cloud VPC.
 
-Предпочтительный централизованный вариант — NetBird Nameserver Group:
+Предпочтительный централизованный вариант — split-DNS для нужной зоны:
 
 - DNS-серверы нужной VPC;
-- Match Domain `mdb.yandexcloud.net`;
-- Distribution Group нужных клиентов;
+- зона `mdb.yandexcloud.net`;
+- назначение нужным клиентам;
 - маршрут к DNS IP;
-- разрешённые TCP/UDP 53 через routing peer.
+- разрешённые TCP/UDP 53 через сетевой шлюз.
 
 Для отдельного Mac можно установить scoped resolver по инструкции:
 
@@ -237,7 +237,7 @@ Scoped resolver используют только приложения, рабо
 
 `dig`, некоторые runtime и приложения со встроенным DNS-клиентом могут его обходить.
 
-На iOS `/etc/resolver` недоступен — используйте NetBird Nameserver Group.
+На iOS `/etc/resolver` недоступен — используйте централизованную split-DNS настройку.
 
 ## GeoLite2
 
@@ -262,7 +262,7 @@ https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb
 - Re-filter загружается Shadowrocket напрямую из ветки `main`, поэтому изменения этих списков не проходят через генератор репозитория.
 - Дополнительный рекламный `REJECT.list` также загружается из внешнего репозитория, но генератор проверяет, что его текущий формат остаётся совместим с DOMAIN-фазой.
 - Национальные `.ru/.рф/.su/.by` правила являются дополнительной политикой данного профиля, а не прямым преобразованием отдельной категории RoscomVPN.
-- Scoped DNS не заменяет NetBird: resolver выбирает DNS-сервер, а NetBird обеспечивает маршрут и сетевой доступ.
+- Scoped DNS только выбирает DNS-сервер; маршрут и сетевой доступ должны быть настроены отдельно.
 
 ## Разработка
 
@@ -295,7 +295,6 @@ git diff --exit-code -- rules shadowrocket.conf
 - [RoscomVPN geosite](https://github.com/hydraponique/roscomvpn-geosite)
 - [RoscomVPN geoip](https://github.com/hydraponique/roscomvpn-geoip)
 - [Re-filter](https://github.com/1andrevich/Re-filter-lists)
-- [NetBird DNS](https://docs.netbird.io/manage/dns/internal-dns-servers)
 - [Yandex Cloud MDB DNS](https://yandex.cloud/en/docs/managed-postgresql/qa/errors)
 
 Уведомления о лицензиях сторонних данных находятся в [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
