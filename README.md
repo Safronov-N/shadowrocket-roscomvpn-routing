@@ -207,38 +207,6 @@ showip.net
 
 Это позволяет использовать их для проверки фактического внешнего адреса прокси независимо от остальных DIRECT-правил.
 
-## Private Yandex MDB
-
-Для `*.mdb.yandexcloud.net` одного `always-real-ip` или `[Host]` недостаточно: публичный DNS не знает private A-записи, а статический IP ломает автоматический failover master.
-
-Нужен DNS соответствующей Yandex Cloud VPC.
-
-Предпочтительный централизованный вариант — split-DNS для нужной зоны:
-
-- DNS-серверы нужной VPC;
-- зона `mdb.yandexcloud.net`;
-- назначение нужным клиентам;
-- маршрут к DNS IP;
-- разрешённые TCP/UDP 53 через сетевой шлюз.
-
-Для отдельного Mac можно установить scoped resolver по инструкции:
-
-[`examples/macos-resolver/README.md`](examples/macos-resolver/README.md)
-
-Он направляет только `mdb.yandexcloud.net` через указанный private DNS.
-
-Профиль Shadowrocket:
-
-- разрешает private DNS-ответы;
-- исключает private сети из TUN;
-- не отправляет ошибку DIRECT-DNS в proxy resolver.
-
-Scoped resolver используют только приложения, работающие через системный resolver macOS.
-
-`dig`, некоторые runtime и приложения со встроенным DNS-клиентом могут его обходить.
-
-На iOS `/etc/resolver` недоступен — используйте централизованную split-DNS настройку.
-
 ## GeoLite2
 
 Для более свежей Country-базы можно указать в:
@@ -295,6 +263,5 @@ git diff --exit-code -- rules shadowrocket.conf
 - [RoscomVPN geosite](https://github.com/hydraponique/roscomvpn-geosite)
 - [RoscomVPN geoip](https://github.com/hydraponique/roscomvpn-geoip)
 - [Re-filter](https://github.com/1andrevich/Re-filter-lists)
-- [Yandex Cloud MDB DNS](https://yandex.cloud/en/docs/managed-postgresql/qa/errors)
 
 Уведомления о лицензиях сторонних данных находятся в [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
